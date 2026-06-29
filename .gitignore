@@ -1,0 +1,30 @@
+# Fichiers de configuration et sensibles
+config/init.sql
+setup.php
+.env
+*.log
+.DS_Store
+Thumbs.db
+
+# Dossiers d'upload (contenu généré par l'utilisateur)
+uploads/
+!uploads/.htaccess
+!uploads/.gitkeep
+
+# Fichiers temporaires
+*.tmp
+*.bak
+test_render.php
+reset_db.php
+
+# Éditeurs et OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# WAMP
+wamp64/
+www/
+tmp/
