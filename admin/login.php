@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 
 if (isAdminLoggedIn()) {
     header('Location: index.php');
@@ -10,25 +11,35 @@ if (isAdminLoggedIn()) {
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    verifyCsrfToken();
 
-    if (empty($username) || empty($password)) {
-        $error = 'Veuillez remplir tous les champs.';
+    if (!checkLoginAttempts()) {
+        $remaining = ceil(getRemainingLockoutTime() / 60);
+        $error = "Trop de tentatives. Réessayez dans {$remaining} minute(s).";
     } else {
-        $db = getDB();
-        $stmt = $db->prepare("SELECT * FROM admin_users WHERE username = ?");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
 
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['admin_logged_in'] = true;
-            $_SESSION['admin_user'] = $user['username'];
-            $_SESSION['admin_id'] = $user['id'];
-            header('Location: index.php');
-            exit;
+        if (empty($username) || empty($password)) {
+            $error = 'Veuillez remplir tous les champs.';
         } else {
-            $error = 'Identifiants incorrects.';
+            $db = getDB();
+            $stmt = $db->prepare("SELECT * FROM admin_users WHERE username = ?");
+            $stmt->execute([$username]);
+            $user = $stmt->fetch();
+
+            if ($user && password_verify($password, $user['password'])) {
+                resetLoginAttempts();
+                session_regenerate_id(true);
+                $_SESSION['admin_logged_in'] = true;
+                $_SESSION['admin_user'] = $user['username'];
+                $_SESSION['admin_id'] = $user['id'];
+                header('Location: index.php');
+                exit;
+            } else {
+                recordFailedLogin();
+                $error = 'Identifiants incorrects.';
+            }
         }
     }
 }
@@ -52,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST" action="">
+                <?= csrfInput() ?>
                 <div class="form-group">
                     <label for="username">Nom d'utilisateur</label>
                     <input type="text" id="username" name="username" class="form-control" required value="<?= e($_POST['username'] ?? '') ?>" autofocus>

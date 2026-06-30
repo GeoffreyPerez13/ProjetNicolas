@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -9,7 +10,8 @@ $id = $_GET['id'] ?? null;
 $error = '';
 
 // Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'delete') {
+    verifyCsrfToken();
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $category_id = !empty($_POST['category_id']) ? intval($_POST['category_id']) : null;
@@ -55,8 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle delete
-if ($action === 'delete' && $id) {
+// Handle delete (POST only for CSRF safety)
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $oeuvre = $db->prepare("SELECT * FROM oeuvres WHERE id = ?");
     $oeuvre->execute([$id]);
     $oeuvre = $oeuvre->fetch();
@@ -139,7 +142,10 @@ $allCategories = $db->query("SELECT * FROM categories ORDER BY name ASC")->fetch
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $o['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $o['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer cette œuvre ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $o['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer cette œuvre ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -161,6 +167,7 @@ $allCategories = $db->query("SELECT * FROM categories ORDER BY name ASC")->fetch
 
                 <div class="admin-card">
                     <form method="POST" enctype="multipart/form-data" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($oeuvre): ?>
                             <input type="hidden" name="id" value="<?= $oeuvre['id'] ?>">

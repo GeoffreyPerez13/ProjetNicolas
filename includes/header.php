@@ -1,6 +1,7 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 $settings = getSettings();
 $categories = getCategories();
 $currentPage = basename($_SERVER['PHP_SELF'], '.php');

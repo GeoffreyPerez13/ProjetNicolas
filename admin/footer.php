@@ -1,12 +1,14 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
 $footerSettings = getFooterSettings();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $copyright_text = trim($_POST['copyright_text'] ?? '');
     $show_social_links = isset($_POST['show_social_links']) ? 1 : 0;
     $show_studio_name = isset($_POST['show_studio_name']) ? 1 : 0;
@@ -49,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
 
             <form method="POST">
+                <?= csrfInput() ?>
                 <div class="admin-card">
                     <div class="admin-card-header">
                         <h2>Contenu du footer</h2>

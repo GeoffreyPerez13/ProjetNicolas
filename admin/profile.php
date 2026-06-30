@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -8,6 +9,7 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $current_password = $_POST['current_password'] ?? '';
     $new_password = $_POST['new_password'] ?? '';
     $confirm_password = $_POST['confirm_password'] ?? '';
@@ -63,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h2>Changer le mot de passe</h2>
                 </div>
                 <form method="POST" class="admin-form">
+                    <?= csrfInput() ?>
                     <div class="form-group">
                         <label>Mot de passe actuel <span class="required">*</span></label>
                         <input type="password" name="current_password" class="form-control" required>

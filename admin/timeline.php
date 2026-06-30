@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -8,7 +9,8 @@ $action = $_GET['action'] ?? 'list';
 $id = $_GET['id'] ?? null;
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'delete') {
+    verifyCsrfToken();
     $year = trim($_POST['year'] ?? '');
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
@@ -33,7 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if ($action === 'delete' && $id) {
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $db->prepare("DELETE FROM timeline_events WHERE id = ?")->execute([$id]);
     setFlash('success', 'Événement supprimé.');
     header('Location: timeline.php');
@@ -108,7 +111,10 @@ $eventTypes = [
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $ev['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $ev['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $ev['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -130,6 +136,7 @@ $eventTypes = [
 
                 <div class="admin-card">
                     <form method="POST" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($event): ?>
                             <input type="hidden" name="id" value="<?= $event['id'] ?>">

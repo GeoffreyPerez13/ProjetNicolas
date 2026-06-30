@@ -1,5 +1,10 @@
 # Protect sensitive files (Apache 2.4 syntax)
-<FilesMatch "\.(sql|md)$">
+<FilesMatch "\.(sql|md|ini|log|sh|bak|env)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to hidden files (.git, .env, etc.)
+<FilesMatch "^\.">
     Require all denied
 </FilesMatch>
 
@@ -7,9 +12,18 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteRule ^config/ - [F,L]
+    RewriteRule ^setup\.php$ - [F,L]
 </IfModule>
 
 ErrorDocument 404 /ProjetNico/404.php
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
 
 # Set default charset
 AddDefaultCharset UTF-8

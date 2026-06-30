@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -10,6 +11,7 @@ $error = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $name = trim($_POST['name'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $mosaic_layout = $_POST['mosaic_layout'] ?? 'grid';
@@ -48,8 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle delete
-if ($action === 'delete' && $id) {
+// Handle delete (POST only for CSRF safety)
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $cat = $db->prepare("SELECT * FROM categories WHERE id = ?");
     $cat->execute([$id]);
     $cat = $cat->fetch();
@@ -136,7 +139,10 @@ $allCategories = $db->query("SELECT c.*, (SELECT COUNT(*) FROM oeuvres WHERE cat
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $cat['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $cat['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer cette catégorie ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $cat['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer cette catégorie ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -158,6 +164,7 @@ $allCategories = $db->query("SELECT c.*, (SELECT COUNT(*) FROM oeuvres WHERE cat
 
                 <div class="admin-card">
                     <form method="POST" enctype="multipart/form-data" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($category): ?>
                             <input type="hidden" name="id" value="<?= $category['id'] ?>">

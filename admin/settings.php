@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -8,6 +9,7 @@ $settings = getSettings();
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $site_name = trim($_POST['site_name'] ?? '');
     $artist_firstname = trim($_POST['artist_firstname'] ?? '');
     $artist_lastname = trim($_POST['artist_lastname'] ?? '');
@@ -83,6 +85,7 @@ $fontOptions = [
             <?php endif; ?>
 
             <form method="POST" enctype="multipart/form-data">
+                <?= csrfInput() ?>
                 <!-- Identity -->
                 <div class="admin-card">
                     <div class="admin-card-header">

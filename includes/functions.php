@@ -1,6 +1,99 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 
+// ============================================
+// SECURITY: Session configuration
+// ============================================
+function secureSessionStart() {
+    if (session_status() === PHP_SESSION_NONE) {
+        ini_set('session.cookie_httponly', 1);
+        ini_set('session.cookie_samesite', 'Strict');
+        ini_set('session.use_strict_mode', 1);
+        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+            ini_set('session.cookie_secure', 1);
+        }
+        session_start();
+    }
+    // Session timeout (30 minutes)
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
+        session_unset();
+        session_destroy();
+        session_start();
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+// ============================================
+// SECURITY: CSRF token management
+// ============================================
+function generateCsrfToken() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrfInput() {
+    return '<input type="hidden" name="csrf_token" value="' . generateCsrfToken() . '">';
+}
+
+function verifyCsrfToken() {
+    $token = $_POST['csrf_token'] ?? '';
+    if (empty($token) || !hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
+        http_response_code(403);
+        die('Erreur de sécurité : token CSRF invalide.');
+    }
+}
+
+// ============================================
+// SECURITY: HTTP security headers
+// ============================================
+function sendSecurityHeaders() {
+    if (!headers_sent()) {
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
+        header('X-XSS-Protection: 1; mode=block');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+    }
+}
+
+// ============================================
+// SECURITY: Brute force protection
+// ============================================
+function checkLoginAttempts() {
+    $key = 'login_attempts';
+    $maxAttempts = 5;
+    $lockoutTime = 900; // 15 minutes
+    if (!isset($_SESSION[$key])) {
+        $_SESSION[$key] = ['count' => 0, 'first_attempt' => time()];
+    }
+    $attempts = $_SESSION[$key];
+    // Reset if lockout period has passed
+    if (time() - $attempts['first_attempt'] > $lockoutTime) {
+        $_SESSION[$key] = ['count' => 0, 'first_attempt' => time()];
+        return true;
+    }
+    return $attempts['count'] < $maxAttempts;
+}
+
+function recordFailedLogin() {
+    if (!isset($_SESSION['login_attempts'])) {
+        $_SESSION['login_attempts'] = ['count' => 0, 'first_attempt' => time()];
+    }
+    $_SESSION['login_attempts']['count']++;
+}
+
+function resetLoginAttempts() {
+    unset($_SESSION['login_attempts']);
+}
+
+function getRemainingLockoutTime() {
+    if (!isset($_SESSION['login_attempts'])) return 0;
+    $elapsed = time() - $_SESSION['login_attempts']['first_attempt'];
+    $remaining = 900 - $elapsed;
+    return max(0, $remaining);
+}
+
 // Get site settings
 function getSettings() {
     $db = getDB();
@@ -130,14 +223,29 @@ function generateSlug($string) {
 
 // Upload image
 function uploadImage($file, $folder = 'oeuvres') {
-    $uploadDir = __DIR__ . '/../uploads/' . $folder . '/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
+    $allowedFolders = ['oeuvres', 'categories', 'expositions', 'banner', 'bio'];
+    if (!in_array($folder, $allowedFolders)) {
+        return ['error' => 'Dossier d\'upload non autorisé.'];
     }
 
+    $uploadDir = __DIR__ . '/../uploads/' . $folder . '/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0755, true);
+    }
+
+    // Validate extension (whitelist)
+    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($extension, $allowedExtensions)) {
+        return ['error' => 'Extension non autorisée. Utilisez JPG, PNG, GIF ou WebP.'];
+    }
+
+    // Validate MIME type using finfo (server-side, not spoofable)
     $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!in_array($file['type'], $allowedTypes)) {
-        return ['error' => 'Type de fichier non autorisé. Utilisez JPG, PNG, GIF ou WebP.'];
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo->file($file['tmp_name']);
+    if (!in_array($mimeType, $allowedTypes)) {
+        return ['error' => 'Type de fichier non autorisé. Le contenu ne correspond pas à une image valide.'];
     }
 
     $maxSize = 10 * 1024 * 1024; // 10MB
@@ -145,8 +253,13 @@ function uploadImage($file, $folder = 'oeuvres') {
         return ['error' => 'Le fichier est trop volumineux (max 10MB).'];
     }
 
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = uniqid() . '_' . time() . '.' . $extension;
+    // Verify it's a real image
+    $imageInfo = @getimagesize($file['tmp_name']);
+    if ($imageInfo === false) {
+        return ['error' => 'Le fichier n\'est pas une image valide.'];
+    }
+
+    $filename = bin2hex(random_bytes(16)) . '.' . $extension;
     $destination = $uploadDir . $filename;
 
     if (move_uploaded_file($file['tmp_name'], $destination)) {
@@ -156,12 +269,23 @@ function uploadImage($file, $folder = 'oeuvres') {
     return ['error' => 'Erreur lors de l\'upload du fichier.'];
 }
 
-// Delete image file
+// Delete image file (with path traversal protection)
 function deleteImage($path) {
-    $fullPath = __DIR__ . '/../' . $path;
-    if (file_exists($fullPath) && is_file($fullPath)) {
-        unlink($fullPath);
+    // Whitelist: only allow deletion within known upload subdirectories
+    if (!preg_match('#^uploads/(oeuvres|categories|expositions|banner|bio)/[a-zA-Z0-9_.-]+$#', $path)) {
+        return false;
     }
+    $fullPath = realpath(__DIR__ . '/../' . $path);
+    $uploadsDir = realpath(__DIR__ . '/../uploads');
+    // Ensure the resolved path is inside the uploads directory
+    if ($fullPath === false || $uploadsDir === false || strpos($fullPath, $uploadsDir) !== 0) {
+        return false;
+    }
+    if (is_file($fullPath)) {
+        unlink($fullPath);
+        return true;
+    }
+    return false;
 }
 
 // Sanitize output

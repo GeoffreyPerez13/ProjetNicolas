@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -10,7 +11,8 @@ $error = '';
 
 $platforms = ['Instagram', 'Facebook', 'Twitter', 'YouTube', 'LinkedIn', 'TikTok', 'Behance', 'Autre'];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'delete') {
+    verifyCsrfToken();
     $platform = trim($_POST['platform'] ?? '');
     $url = trim($_POST['url'] ?? '');
     $display_order = intval($_POST['display_order'] ?? 0);
@@ -33,7 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if ($action === 'delete' && $id) {
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $db->prepare("DELETE FROM social_links WHERE id = ?")->execute([$id]);
     setFlash('success', 'Lien supprimé.');
     header('Location: social.php');
@@ -102,7 +105,10 @@ $allLinks = $db->query("SELECT * FROM social_links ORDER BY display_order ASC")-
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $l['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $l['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $l['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -124,6 +130,7 @@ $allLinks = $db->query("SELECT * FROM social_links ORDER BY display_order ASC")-
 
                 <div class="admin-card">
                     <form method="POST" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($link): ?>
                             <input type="hidden" name="id" value="<?= $link['id'] ?>">

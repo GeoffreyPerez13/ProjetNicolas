@@ -19,7 +19,8 @@ function getDB() {
                 ]
             );
         } catch (PDOException $e) {
-            die("Erreur de connexion : " . $e->getMessage());
+            error_log("DB Connection Error: " . $e->getMessage());
+            die("Erreur de connexion à la base de données. Contactez l'administrateur.");
         }
     }
     return $pdo;

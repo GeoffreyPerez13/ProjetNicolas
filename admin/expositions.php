@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -9,7 +10,8 @@ $id = $_GET['id'] ?? null;
 $error = '';
 
 // Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'delete') {
+    verifyCsrfToken();
     $title = trim($_POST['title'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $location = trim($_POST['location'] ?? '');
@@ -67,8 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle delete
-if ($action === 'delete' && $id) {
+// Handle delete (POST only for CSRF safety)
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $expo = $db->prepare("SELECT * FROM expositions WHERE id = ?");
     $expo->execute([$id]);
     $expo = $expo->fetch();
@@ -164,7 +167,10 @@ $allOeuvres = $db->query("SELECT * FROM oeuvres ORDER BY title ASC")->fetchAll()
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $ex['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $ex['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $ex['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -186,6 +192,7 @@ $allOeuvres = $db->query("SELECT * FROM oeuvres ORDER BY title ASC")->fetchAll()
 
                 <div class="admin-card">
                     <form method="POST" enctype="multipart/form-data" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($expo): ?>
                             <input type="hidden" name="id" value="<?= $expo['id'] ?>">

@@ -1,6 +1,7 @@
 <?php
-session_start();
 require_once __DIR__ . '/../includes/functions.php';
+secureSessionStart();
+sendSecurityHeaders();
 requireAdmin();
 
 $db = getDB();
@@ -8,7 +9,8 @@ $action = $_GET['action'] ?? 'list';
 $id = $_GET['id'] ?? null;
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'delete') {
+    verifyCsrfToken();
     $title = trim($_POST['title'] ?? '');
     $subtitle = trim($_POST['subtitle'] ?? '');
     $link_url = trim($_POST['link_url'] ?? '');
@@ -46,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if ($action === 'delete' && $id) {
+if ($action === 'delete' && $id && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    verifyCsrfToken();
     $slide = $db->prepare("SELECT * FROM banner_slides WHERE id = ?");
     $slide->execute([$id]);
     $slide = $slide->fetch();
@@ -121,7 +124,10 @@ $allSlides = $db->query("SELECT * FROM banner_slides ORDER BY display_order ASC"
                                     <td>
                                         <div class="actions">
                                             <a href="?action=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-secondary">Modifier</a>
-                                            <a href="?action=delete&id=<?= $s['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Supprimer ?')">Supprimer</a>
+                                            <form method="POST" action="?action=delete&id=<?= $s['id'] ?>" style="display:inline;" onsubmit="return confirm('Supprimer ?')">
+                                                <?= csrfInput() ?>
+                                                <button type="submit" class="btn btn-sm btn-danger">Supprimer</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -143,6 +149,7 @@ $allSlides = $db->query("SELECT * FROM banner_slides ORDER BY display_order ASC"
 
                 <div class="admin-card">
                     <form method="POST" enctype="multipart/form-data" class="admin-form">
+                        <?= csrfInput() ?>
                         <input type="hidden" name="form_action" value="<?= $action ?>">
                         <?php if ($slide): ?>
                             <input type="hidden" name="id" value="<?= $slide['id'] ?>">
