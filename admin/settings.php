@@ -21,7 +21,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bio_content = trim($_POST['bio_content'] ?? '');
 
     $bio_image = $_POST['existing_bio_image'] ?? '';
-    if (!empty($_FILES['bio_image']['name'])) {
+    if (!empty($_POST['delete_bio_image'])) {
+        if (!empty($bio_image)) deleteImage($bio_image);
+        $bio_image = '';
+    } elseif (!empty($_FILES['bio_image']['name'])) {
         $upload = uploadImage($_FILES['bio_image'], 'bio');
         if (isset($upload['error'])) {
             $error = $upload['error'];
@@ -191,6 +194,10 @@ $fontOptions = [
                             <?php if (!empty($settings['bio_image'])): ?>
                                 <div class="current-image">
                                     <img src="<?= baseUrl() . '/' . e($settings['bio_image']) ?>" alt="">
+                                    <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer;">
+                                        <input type="checkbox" name="delete_bio_image" value="1">
+                                        <span style="color:#dc2626;font-size:0.85rem;">Supprimer cette image</span>
+                                    </label>
                                 </div>
                             <?php endif; ?>
                         </div>
